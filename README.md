@@ -88,13 +88,10 @@ I eventually came up with the following solution:
         return self
 
     def measure(self, string):
-        # We compy the compressor, so we can close the copy without disturbing the
-        # main compressor. We need to close (flush with Z_FINISH) the copy, since that
-        # is the only way to get a precise measure of the entropy of the string.
-        compressor = self.compressor.copy()
-        data = compressor.compress(string.encode())
-        data += compressor.flush()
-        return len(data) - self.base_size
+        compressor = self.compressor.copy()          # Copy the internal state and buffer
+        data = compressor.compress(string.encode())  # Main compression call
+        data += compressor.flush()                   # Squeeze out the rest
+        return len(data) - self.base_size            # Subtract size of text already in buffer
 ```
 
 The idea is to close the compressor after each measurement, (you can't compress new text after `compressor.flush()`,) to be sure I have the most realistic measurement.
