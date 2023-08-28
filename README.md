@@ -1,69 +1,63 @@
 # ziplm
 
-Useless but mildly interesting language model using compressors built-in to Python.
-
-## Usage
-
-You can "train" it using some training data:
+Beam search is a common way of improving the quality of poor quality language models.
+The ZipLM is a "Useless but mildly interesting language model using compressors built-in to Python."
+If we try to sample a sentence after training on The Great Gatsby:
 
 ```{python}
-data = open(my_favorite_text_file).read().lower()
-alphabet = "qwertyuiopasdfghjklzxcvbnm,.;1234567890 "
-model = ziplm.ZipModel(alphabet, training=data)
-"".join(model.sample_sequence(10)) # sample 10 characters from the alphabet
+data = open(gatsby).read()[-1000:]
+model = ziplm.ZipModel(SimpleEncoder()).fit(data)
+"".join(model.sample_sequence(100))  # I get 'ixlI vsoioul.des-kA;dfagwoI-k;IekxyIaIbu Ddg.u bg,obiouu;xrhistu ewurxasw-v ;suasockmiln.Gyh esbykIw'
 ```
 
-You can also run it without any training data, and just forward sample to see what kinds of patterns gzip likes:
-```{python}
-alphabet = "abc"
-model = ziplm.ZipModel(alphabet)
-"".join(model.sample_sequence(100)) # I get 'ccabcabcabcabcabcabcabcabcabcabcabcabcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbccabcbcbcbc'
-```
-
-You can also get the probability for a sequence:
-```{python}
-alphabet = "qwertyuiopasdfghjklzxcvbnm "
-model = ziplm.ZipModel(alphabet)
-model.sequence_logprob("this is my favorite string") # I get -83.8
-```
-
-You can also try using `bz2` and `lzma` as language models by passing them as the `compressor` argument to the model
+It's pretty close to random gibberish.
+Sure, the ZipLM will succeed in continuing the sequence "abcabcabc..." if you give it a long enough prompt, but it hardly generates legible human text.
+In this repository I've addeda simple implementation of Beam search.
+Let's see how well it does:
 
 ```{python}
-import lzma
-model = ziplm.ZipModel(alphabet, compressor=lzma)
-"".join(model.sample_sequence(100)) # I get 'cccbaaaaacccccabcacccbaaaaabaacaabaacaabaacaabaabacaaaaaaaaaaacccbabacaaaaaaaaaaaccccacaaccbaaaaaccc'
+data = open(gatsby).read()[-1000:].replace("\n", "")
+model = ziplm.ZipModel(SimpleEncoder()).fit(data)
+model.beam_search(100, beam_width=1)      # Output: ' ADDsDDsDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD'
+model.beam_search(100, beam_width=10)     # Output: " Acbby'b close;DutchuDutchuDutlue lawn, anycbby'bDutlueowawn,Dutc coulwloutchuDutluewlouDutchuDuwmo'"
+model.beam_search(100, beam_width=100)    # Output: "Its vt flowlors' t man n dreared into atood nd treerer Gatso his breaggransita nd gre sat tdonce for"
+model.beam_search(100, beam_width=1000)   # Output: " Ao his breath k. He had cow of Dais he lawn, st he could hwith d Daisy'ssy'ss omed sought olay with"
 ```
 
-## Why does this "work"?
+At least "He had cow of Dais he lawn" sounds more like a real sentence than "Ddg.u bg,obiouu;".
+But it's still worse than the simple [Markov chain language models people trained a decade ago](https://kingjamesprogramming.tumblr.com/).
+I'd love to try even higher beam widths, but the language model is very slow - even as a restricted to "training" on the last 1000 characters of the Gatsby text.
+I will solve this problem later, and explore how Byte Pair Encoding helps (or doesn't help), but first let's understand why Beam search even works.
 
-This works because of two facts:
-1. A language model is nothing but a distribution on the next token given previous tokens, $p(x \mid c)$.
-2. There is a general equivalence between *probability distributions* and *codes*.
-
-The second point is what makes this interesting. Information theory tells us that we can derive codes from probability distributions. That is, if I have some datapoints $x$, and I know that they follow probability distribution $p(x)$, I can come up with a lossless binary code to encode the $x$ where the length of each code is $-\log_2 p(x)$. This code minimizes the average code length: the only way to get shorter average code length would be to go into the realm of lossy compression. This is called the Shannon Limit.
-
-Since I can convert probability distributions to codes in this way, I can also convert codes to probability distributions. If I have a code (like gzip) that describes my datapoint with length $l(x)$ in binary, then that corresponds to a probability distribution $p(x) = 2^{-l(x)}$. If the code is $K$-ary, then the corresponding distribution is 
-$$p(x) = K^{-l(x)}.$$ 
-
-The ZipLM model works by converting code lengths to probabilities in this way. If I have a vocabulary of size $K$, and a string $c$, then the probability distribution for continuations $x$ is:
-$$p(x \mid c) \propto K^{-l(cx)},$$
-where the proportionality reflects the fact that we have to sum over the compressed lengths of $cx^\prime$ for all $x^\prime$ in the vocabulary. That's all there is to it.
-
-## How well does it work?
-
-It's pretty bad, but it doesn't generate total junk. Here I trained the gzip model in Moby Dick---from the [Project Gutenberg text](https://www.gutenberg.org/files/2701/2701-0.txt)---and the output at least has some recognizable parts:
-```{python}
-data = open("mobydick.txt").read().lower()
-alphabet = "qwertyuiopasdfghjkl;'zxcvbnm,. "
-model = ziplm.Model(alphabet, data)
-"".join(model.sample_sequence(100)) 
+To really understand why the ZipLM is so bad without beam search, let's try to look at the actual log-probs of a next output character:
 ```
-This gives me
-```{python}
-"'theudcanvas. ;cm,zumhmcyoetter toauuo long a one aay,;wvbu.mvns. x the dtls and enso.;k.like bla.njv'"
+model.logprobs("His name was ")
+Out[85]:
+array([-8.87835804, -3.3331806 , -3.3331806 , -3.3331806 , -3.3331806 ,
+       -8.87835804, -3.3331806 , -8.87835804, -3.3331806 , -3.3331806 ,
+       -3.3331806 , -3.3331806 , -3.3331806 , -8.87835804, -3.3331806 ,
+       -3.3331806 , -3.3331806 , -8.87835804, -3.3331806 , -3.3331806 ,
+       -8.87835804, -3.3331806 , -8.87835804, -3.3331806 , -3.3331806 ,
+       -3.3331806 , -3.3331806 , -3.3331806 , -3.3331806 , -3.3331806 ,
+       -3.3331806 , -3.3331806 , -3.3331806 , -3.3331806 , -3.3331806 ])
 ```
-which at least seems to have "long a one" in it.
+
+There are basically just two different values.
+What gives?
+Well. The ZipLM works by taking the prompt/"training text"; concatenating it with each character from a to z; and compressing each of 26 strings using gzip.
+That is, it measures `len(gzip(prompt + "a"))`, `len(gzip(prompt + "b"))`, and so on.
+In the case above, the length of `gzip(prompt)` is 565 bytes.
+The length of `gzip(prompt + "a")` is 566 bytes, but the length of `gzip(prompt + "b")` is just 565 like the prompt.
+Apparently the compressor was able to incooperate the "b" into some token in the suffix of the prompt.
+If we look at the length of `gzip(prompt + ch)` for all characters, `ch`, minus the length of `gzip(prompt)`, we get
+
+```
+[1. 0. 0. 0. 0. 1. 0. 1. 0. 0. 0. 0. 0. 1. 0. 0. 0. 1. 0. 0. 1. 0. 1. 0.
+ 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]
+```
+
+Only two different values.
+This explains why there are only two different logprops as well.
 
 
 
