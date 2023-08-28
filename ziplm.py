@@ -34,13 +34,26 @@ class ZipModel:
         return self
 
     def logprobs(self, prefix="", temperature=1):
-        base_size = len(self.compressor.compress("".join([self.training, prefix]).encode()))
-        code_lengths = np.array([
-            (len(self.compressor.compress("".join([self.training, prefix, v]).encode()))
-            - base_size) / len(v)
-            for v in self.bpe.vocab
-        ])
-        return scipy.special.log_softmax(-code_lengths*self.conversion*(1/temperature))
+        base_size = len(
+            self.compressor.compress("".join([self.training, prefix]).encode())
+        )
+        code_lengths = np.array(
+            [
+                (
+                    len(
+                        self.compressor.compress(
+                            "".join([self.training, prefix, v]).encode()
+                        )
+                    )
+                    - base_size
+                )
+                / len(v)
+                for v in self.bpe.vocab
+            ]
+        )
+        return scipy.special.log_softmax(
+            -code_lengths * self.conversion * (1 / temperature)
+        )
 
     def sample(self, prefix="", temperature=1):
         scores = self.logprobs(prefix, temperature=temperature)
@@ -85,14 +98,14 @@ class ZipModel:
 
 def main():
     data = "abcabcabc"
-    #data = "this is an example this is an example this is an example"
+    # data = "this is an example this is an example this is an example"
     data = open("gatsby").read()[-1000:]
     print("Original size:", len(data))
 
     # LZ77 Encode
     print("BP Encoding...")
     lm = ZipModel(SimpleEncoder())
-    #lm = ZipModel(BPEncoder(num_merges=100))
+    # lm = ZipModel(BPEncoder(num_merges=100))
     lm.fit(data)
 
     print(lm.bpe.vocab)

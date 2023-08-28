@@ -34,10 +34,10 @@ class BPEncoder:
         next_token = max(map(ord, self.token_to_text.keys())) + 1
 
         for i in tqdm.tqdm(range(self.num_merges)):
-            cnt = Counter(text[i:i+2] for i in range(len(text)-1))
+            cnt = Counter(text[i : i + 2] for i in range(len(text) - 1))
             if not cnt:
                 break
-            (pair, c), = cnt.most_common(1)
+            ((pair, c),) = cnt.most_common(1)
             if c == 1:
                 print("Stopping early because there are no more tokens to merge.")
                 break
@@ -52,12 +52,12 @@ class BPEncoder:
         return set(self.token_to_text.values())
 
     def encode(self, text):
-        for (pair, token) in self.merges:
+        for pair, token in self.merges:
             text = text.replace(pair, token)
         return text
 
     def decode(self, text):
-        for (pair, token) in self.merges[::-1]:
+        for pair, token in self.merges[::-1]:
             text = text.replace(token, pair)
         return text
 
@@ -72,8 +72,12 @@ class ZipModel:
         self.bpe.fit(training)  # Train the encoder, if we're using one
         self.compressor = zlib.compressobj()
         self.compressor.compress(training.encode())  # "Train" the model
-        self.compressor.flush(zlib.Z_SYNC_FLUSH)     # Friendly nudge to reduce the buffer size
-        self.base_size = len(self.compressor.copy().flush())  # Size of buffer if we stopped now
+        self.compressor.flush(
+            zlib.Z_SYNC_FLUSH
+        )  # Friendly nudge to reduce the buffer size
+        self.base_size = len(
+            self.compressor.copy().flush()
+        )  # Size of buffer if we stopped now
         return self
 
     def measure(self, string):
@@ -86,11 +90,12 @@ class ZipModel:
         return len(data) - self.base_size
 
     def logprobs(self, prefix="", temperature=1):
-        code_lengths = np.array([
-            self.measure(prefix + v) / len(v)
-            for v in self.bpe.vocab
-        ])
-        return scipy.special.log_softmax(-code_lengths*self.conversion*(1/temperature))
+        code_lengths = np.array(
+            [self.measure(prefix + v) / len(v) for v in self.bpe.vocab]
+        )
+        return scipy.special.log_softmax(
+            -code_lengths * self.conversion * (1 / temperature)
+        )
 
     def sample(self, prefix="", temperature=1):
         scores = self.logprobs(prefix, temperature=temperature)
@@ -135,25 +140,24 @@ class ZipModel:
 
 def main():
     data = "abcabcabc"
-    #data = "this is an example this is an example this is an example"
+    # data = "this is an example this is an example this is an example"
     data = open("gatsby").read().replace("\n", " ")
     print("Original size:", len(data))
 
     # LZ77 Encode
     print("BP Encoding...")
-    #lm = ZipModel(SimpleEncoder())
+    # lm = ZipModel(SimpleEncoder())
     lm = ZipModel(BPEncoder(num_merges=1000))
     lm.fit(data)
 
-    print('BPE Vocabulary:', lm.bpe.vocab)
+    print("BPE Vocabulary:", lm.bpe.vocab)
     original_text = "How are you doing?"
     encoded = lm.bpe.encode(original_text)
     decoded = lm.bpe.decode(encoded)
     assert decoded == original_text
 
-
     for temp in range(1, 10):
-        print(f'Temperature: {temp}, Output:', lm.sample_sequence(20, temperature=temp))
+        print(f"Temperature: {temp}, Output:", lm.sample_sequence(20, temperature=temp))
     print()
 
     # print("Doing beam search...")
