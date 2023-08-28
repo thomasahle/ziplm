@@ -136,3 +136,42 @@ How can we write the longest text using the fewest bits?
 Of course by just repeating the token that maximizes $w_x / e_x$.
 With a wide enough beam width, this is what beam search will find.
 So it's just going to repeat some random substring infinitely.
+
+## Enter Byte embedding
+
+As we have seen, the ZipLM on it's own doesn't work: The probability distribution on character level is discretized so much that we just get random text.
+On the other hand, using beam search - which normally is useful for getting better output from bad language models - will just give us a boring repeated piece of text from the training data.
+Does it mean the war is lost, and we must give up and go back to transformers?
+Emphatically no!
+It simply means we need to use an even smarter form of search.
+We need something that still samples from the compressors probability distribution, rather than just maximizing the tokens per bit. But it should work at a larger scale than single characters.
+One way to do this is to find some useful "vocabulary" of subwords, and simply run the sampling algorithm on this instead of the character level.
+I wrote a simple Byte pair encoding (as is used by GPT and others).
+We can then run sampling at different temperatures and see what happens:
+
+```
+lm = ZipModel(BPEncoder(num_merges=1000)).fit(data)
+for temp in range(1, 10):
+       print(f'Temperature: {temp}, Output:', lm.sample_sequence(20, temperature=temp))
+```
+Output:
+```
+Temperature: 1, Output: ong the ?"  "then and the something because s and the there was about the couldn't there was s and the about the there was about the , old sport, old sport, old sport, old sport, old sport
+Temperature: 2, Output: serfir," he . It was afterno," she Gatsby's on the Gatsby, , and I another ----"  ", and the a little , and then had been something , old sport, and then . It was
+Temperature: 3, Output: s, youGatsbyfirst there Daisy dn't come and the . . . . with the from the , and then thought into the she was afternoon, old sport," said couldn't
+Temperature: 4, Output: when 't from the standbegan to thought n't answfor the ought . But she was a little want to , old sportWilson Jordan old sporthad been ."  The
+Temperature: 5, Output: ickranning night dn't ly.  "Wolfshiin his into ed and , and I Miss Bakshe was afternoon."  The Gatsby's Miss Bakfrom the turned ," she
+```
+
+So ok, it's definitely not completely random, like sampling at the character level.
+It still has repetitions at low temps, and gets more rambly at larger temps.
+
+## Conclusion
+
+There is clearly still a lot that can be done to make ZipLM a more useful language model.
+But one idea I had while writing this is that we could also go the other way:
+Why not use the underlying token format of Lz77 when training LLMs?
+Surely transformers can easily learn to say `(-3,1,C)` when they want to use characters they've already outputted a while back.
+It might even teach them a better understanding of characters, solving some issues often attributed to the Byte Pair Encoding.
+Another advantage is the ability to output longer pieces of text at the same price, speeding up inference.
+And as a final bonus: You can train your LLM directly on your `.gz` file, without ever unpacking it!
