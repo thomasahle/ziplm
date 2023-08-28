@@ -1,3 +1,10 @@
+################################################################################
+# Just like the original ziplm, but adding
+# - beam search,
+# - progressive compression,
+# - byte pair encoding (optional)
+################################################################################
+
 import zlib
 
 import numpy as np

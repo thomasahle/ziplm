@@ -1,3 +1,7 @@
+################################################################################
+# Just like the original ziplm, but with beam search
+################################################################################
+
 import gzip, bz2, lzma
 
 import numpy as np
@@ -33,24 +37,15 @@ class ZipModel:
         self.bpe.fit(training)
         return self
 
+    def measure(self, string):
+        return len(self.compressor.compress((self.training + string).encode()))
+
     def logprobs(self, prefix="", temperature=1):
-        base_size = len(
-            self.compressor.compress("".join([self.training, prefix]).encode())
-        )
-        code_lengths = np.array(
-            [
-                (
-                    len(
-                        self.compressor.compress(
-                            "".join([self.training, prefix, v]).encode()
-                        )
-                    )
-                    - base_size
-                )
-                / len(v)
-                for v in self.bpe.vocab
-            ]
-        )
+        base_size = self.measure(prefix)
+        code_lengths = np.array([
+            (self.measure(prefix + v) - base_size) / len(v)
+            for v in self.bpe.vocab
+        ])
         return scipy.special.log_softmax(
             -code_lengths * self.conversion * (1 / temperature)
         )

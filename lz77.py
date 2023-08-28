@@ -3,15 +3,18 @@ from collections import Counter, namedtuple
 import heapq
 from tqdm import tqdm
 
+
 # Huffman Coding
 class Node(namedtuple("Node", ["left", "right"])):
     def walk(self, code, acc):
         self.left.walk(code, acc + "0")
         self.right.walk(code, acc + "1")
 
+
 class Leaf(namedtuple("Leaf", ["value"])):
     def walk(self, code, acc):
         code[self.value] = acc or "0"
+
 
 def huffman_encode(triples):
     h = []
@@ -32,6 +35,7 @@ def huffman_encode(triples):
         root.walk(code, "")
     return code
 
+
 # LZ77 Encoding
 def lz77_encode(s, window_size=200):
     i = 0
@@ -48,12 +52,12 @@ def lz77_encode(s, window_size=200):
                 substr = s[i:buf_end]
 
                 position = s.rfind(substr, offset, i)
-                
+
                 if position != -1 and buf_end - i > max_len:
                     max_len = buf_end - i
                     max_offset = i - position
                 buf_end -= 1
-            
+
             if max_len > 0:
                 out.append((max_offset, max_len))
                 inc = max_len
@@ -63,6 +67,7 @@ def lz77_encode(s, window_size=200):
             pbar.update(inc)
             i += inc
         return out
+
 
 def sample(cnt, n, prefix=""):
     vocab = list(cnt.keys())
@@ -74,11 +79,12 @@ def sample(cnt, n, prefix=""):
             case (offset, length):
                 if offset > len(prefix):
                     continue
-                s = prefix[-offset:-offset+length]
+                s = prefix[-offset : -offset + length]
             case default:
                 print("What?", default)
         yield s
         prefix += s
+
 
 def decode(tokens, prefix=""):
     for token in tokens:
@@ -86,14 +92,15 @@ def decode(tokens, prefix=""):
             case (0, 1, ch):
                 s = ch
             case (offset, length):
-                s = prefix[-offset:-offset+length]
+                s = prefix[-offset : -offset + length]
         yield s
         prefix += s
 
+
 def main():
     data = "abcabcabc"
-    #data = "this is an example this is an example this is an example"
-    #data = open("text").read()
+    # data = "this is an example this is an example this is an example"
+    # data = open("text").read()
     print("Original size:", len(data))
 
     # LZ77 Encode
