@@ -71,5 +71,68 @@ Now we are asking for an approximation to $\log_2(1/p(x_1x_2x_3|c)) = \log_2(1/p
 
 ## Making it faster by delving into gzip itself
 
-The main issue with scaling the Beam search algorithm for ZipLM is that we have to recompress 
+The main issue with scaling the Beam search algorithm is that the original ZipLM compresses the entire "training" string every time we generate a new set of logprobs like this: `len(self.compressor.compress("".join([self.training, prefix, v]).encode()))`.
+This approach may be fine for the original greedy sampling approach, but with beam search we are doing a lot more calls to logprob, so this gets slow.
+What we'd like instead is a "progressive" encoder, that allows us to compress the training text once, and only pay a constant price per new character measured.
+This is a big more tricky than it might seem at first, since the gzip algorithm keeps an internal buffer of the input we give it. So most of the time, as we show it new text, it doesn't output anything. This doesn't mean that the new text has 0 entropy. It just means that gzip is still waiting for more text to decide how to encode it.
 
+I eventually came up with the following solution:
+
+```
+    def fit(self, training):
+        self.bpe.fit(training)  # Train the encoder, if we're using one
+        self.compressor = zlib.compressobj()
+        self.compressor.compress(training.encode())  # "Train" the model
+        self.compressor.flush(zlib.Z_SYNC_FLUSH)     # Friendly nudge to reduce the buffer size
+        self.base_size = len(self.compressor.copy().flush())  # Size of buffer if we stopped now
+        return self
+
+    def measure(self, string):
+        # We compy the compressor, so we can close the copy without disturbing the
+        # main compressor. We need to close (flush with Z_FINISH) the copy, since that
+        # is the only way to get a precise measure of the entropy of the string.
+        compressor = self.compressor.copy()
+        data = compressor.compress(string.encode())
+        data += compressor.flush()
+        return len(data) - self.base_size
+```
+
+The idea is to close the compressor after each measurement, (you can't compress new text after `compressor.flush()`,) to be sure I have the most realistic measurement.
+To avoid disturbing the main compressor that we took time to "train", I copy it, together with its internal buffer before each measurement.
+
+This works pretty well, and we can now train on the entire corpus, and still do pretty fast beam searches:
+```
+mport ziplm2
+data = open("gatsby").read()
+model = ziplm2.ZipModel().fit(data)
+model.beam_search(100, beam_width=100)  # Output: 'xi drivers in the village never\ntook a fare past the entrance gate without stopping for a minute and'
+```
+
+The only problem? This text is just a plain copy of a line from somewhere near the penultimum paragraph.
+Why do we overfit so hard? To understand that, we need to dive deep into the inner workings of gzip, or lz77 as the internal algorithm is called.
+
+## The insides of Gzip
+
+Gzip, at its heart, employs the DEFLATE compression algorithm. DEFLATE, in turn, combines the power of two algorithms: LZ77 (Lempel-Ziv 1977) and Huffman coding.
+The Huffman coding is simply a way to turn the token probabilities into actual bits we can write to a stream, so the Lz77 part is what we are interested in understanding. 
+
+Example: Assume we are compressing the text ABRACADABRA.
+Lz77 converts this into a list of tokens:
+```
+(0,0,A) (0,0,B) (0,0,R) (-3,1,C) (-2,1,D) (-7,3,A)
+```
+The format for each token is `(offset, length, next_character)`.
+The idea is to repeatedly, greedily find the longest match for the remaining suffix of text to be compressed in the already compressed text.
+In the beginning of course there is no match, so we have some 0-length tokens, like (0,0,A).
+But by the time we are compressing the suffix `ACADABRA` we can use the `A` we have already seen and write `(-3,1,C)` meaning "go back 3 and take 1 character, then write C".
+
+Once we have converted the text into this tokenized format,  we count the number of each kind of unique token.
+This gives us the probability distribution we use for the Huffman encoding.
+We see this is an extraodinarily simple scheme, where the assumed probability distribution of a token, given the context, $p(x|c)$, is completely independent of the context!
+Of course there is still some dependency on the character level, but only because the tokens themselves refer to the context.
+
+Now assume we compute the probability $p(x)$, the length $w_x$ and the entropy $e_x = \log_2(1/p(x))$ for each token.
+How can we write the longest text using the fewest bits?
+Of course by just repeating the token that maximizes $w_x / e_x$.
+With a wide enough beam width, this is what beam search will find.
+So it's just going to repeat some random substring infinitely.
