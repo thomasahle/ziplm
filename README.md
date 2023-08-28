@@ -31,7 +31,7 @@ I will solve this problem later, and explore how Byte Pair Encoding helps (or do
 
 ## Why we need Beam search
 To really understand why the ZipLM is so bad without beam search, let's try to look at the actual log-probs of a next output character:
-```
+```{python}
 model.logprobs("His name was ")
 Out[85]:
 array([-8.87835804, -3.3331806 , -3.3331806 , -3.3331806 , -3.3331806 ,
@@ -78,7 +78,7 @@ This is a bit more tricky than it might seem at first since the gzip algorithm k
 
 I eventually came up with the following solution:
 
-```
+```{python}
     def fit(self, training):
         self.bpe.fit(training)  # Train the encoder, if we're using one
         self.compressor = zlib.compressobj()
@@ -149,7 +149,7 @@ One way to do this is to find some useful "vocabulary" of subwords, and simply r
 I wrote a simple Byte pair encoding (as is used by GPT and others).
 We can then run sampling at different temperatures and see what happens:
 
-```
+```{python}
 lm = ZipModel(BPEncoder(num_merges=1000)).fit(data)
 for temp in range(1, 10):
        print(f'Temperature: {temp}, Output:', lm.sample_sequence(20, temperature=temp))
