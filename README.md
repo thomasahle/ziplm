@@ -1,4 +1,4 @@
-# ziplm
+# ZipLm with Beam Search, BPE and Progressive Compression
 
 Beam search is a common way of improving the quality of poor-quality language models.
 The ZipLM is a "Useless but mildly interesting language model using compressors built-in to Python."
