@@ -1,6 +1,6 @@
 # ziplm
 
-Beam search is a common way of improving the quality of poor quality language models.
+Beam search is a common way of improving the quality of poor-quality language models.
 The ZipLM is a "Useless but mildly interesting language model using compressors built-in to Python."
 If we try to sample a sentence after training on The Great Gatsby:
 
@@ -12,7 +12,7 @@ model = ziplm.ZipModel(SimpleEncoder()).fit(data)
 
 It's pretty close to random gibberish.
 Sure, the ZipLM will succeed in continuing the sequence "abcabcabc..." if you give it a long enough prompt, but it hardly generates legible human text.
-In this repository I've addeda simple implementation of Beam search.
+In this repository, I've added a simple implementation of Beam search.
 Let's see how well it does:
 
 ```{python}
@@ -26,8 +26,8 @@ model.beam_search(100, beam_width=1000)   # Output: " Ao his breath k. He had co
 
 At least "He had cow of Dais he lawn" sounds more like a real sentence than "Ddg.u bg,obiouu;".
 But it's still worse than the simple [Markov chain language models people trained a decade ago](https://kingjamesprogramming.tumblr.com/).
-I'd love to try even higher beam widths, but the language model is very slow - even as a restricted to "training" on the last 1000 characters of the Gatsby text.
-I will solve this problem later, and explore how Byte Pair Encoding helps (or doesn't help), but first let's understand why Beam search even works.
+I'd love to try even higher beam widths, but the language model is very slow - even as restricted to "training" on the last 1000 characters of the Gatsby text.
+I will solve this problem later, and explore how Byte Pair Encoding helps (or doesn't help), but first, let's understand why Beam search even works.
 
 ## Why we need Beam search
 To really understand why the ZipLM is so bad without beam search, let's try to look at the actual log-probs of a next output character:
@@ -49,7 +49,7 @@ Well. The ZipLM works by taking the prompt/"training text"; concatenating it wit
 That is, it measures `len(gzip(prompt + "a"))`, `len(gzip(prompt + "b"))`, and so on.
 In the case above, the length of `gzip(prompt)` is 565 bytes.
 The length of `gzip(prompt + "a")` is 566 bytes, but the length of `gzip(prompt + "b")` is just 565 like the prompt.
-Apparently the compressor was able to incooperate the "b" into some token in the suffix of the prompt.
+Apparently, the compressor was able to incorporate the "b" into some token in the suffix of the prompt.
 If we look at the length of `gzip(prompt + ch)` for all characters, `ch`, minus the length of `gzip(prompt)`, we get
 
 ```
@@ -62,19 +62,19 @@ This explains why there are only two different logprops as well.
 One way to think about this is that each possible token/character, $x$, has an output probability $p(x|c)$ given the context, $c$.
 An ideal compressor would use $\log_2(1/p(x|c))$ bits to encode character $x$.
 However, the `gzip` command, as used in the ZipLM, has to output a number of bytes.
-So the real valued $\log_2(1/p(x|c))$ gets "rounded" either up or down.
+So the real-valued $\log_2(1/p(x|c))$ gets "rounded" either up or down.
 
 Why does Beam search help?
 With Beam search we are basically asking the question: "Given I'm going to write 100 characters, which _complete string_ will have the smallest compression".
-Of course actually answering this question would require a "complete search" rather than a "beam search", but this is the question we are approximating the answer to as we increase the beam width.
+Of course, actually answering this question would require a "complete search" rather than a "beam search", but this is the question we are approximating the answer to as we increase the beam width.
 Now we are asking for an approximation to $\log_2(1/p(x_1x_2x_3|c)) = \log_2(1/p(x_1|c)) + \log_2(1/p(x_1x_2|cx_2)) + \log_2(1/p(x_3|cx_2x_2))$, which is a larger number, and so the "rounding" effects are less pronounced.
 
 ## Making it faster by delving into gzip itself
 
 The main issue with scaling the Beam search algorithm is that the original ZipLM compresses the entire "training" string every time we generate a new set of logprobs like this: `len(self.compressor.compress("".join([self.training, prefix, v]).encode()))`.
-This approach may be fine for the original greedy sampling approach, but with beam search we are doing a lot more calls to logprob, so this gets slow.
+This approach may be fine for the original greedy sampling approach, but with beam search, we are doing a lot more calls to logprob, so this gets slow.
 What we'd like instead is a "progressive" encoder, that allows us to compress the training text once, and only pay a constant price per new character measured.
-This is a big more tricky than it might seem at first, since the gzip algorithm keeps an internal buffer of the input we give it. So most of the time, as we show it new text, it doesn't output anything. This doesn't mean that the new text has 0 entropy. It just means that gzip is still waiting for more text to decide how to encode it.
+This is a bit more tricky than it might seem at first since the gzip algorithm keeps an internal buffer of the input we give it. So most of the time, as we show it new text, it doesn't output anything. This doesn't mean that the new text has 0 entropy. It just means that gzip is still waiting for more text to decide how to encode it.
 
 I eventually came up with the following solution:
 
@@ -98,17 +98,17 @@ I eventually came up with the following solution:
 ```
 
 The idea is to close the compressor after each measurement, (you can't compress new text after `compressor.flush()`,) to be sure I have the most realistic measurement.
-To avoid disturbing the main compressor that we took time to "train", I copy it, together with its internal buffer before each measurement.
+To avoid disturbing the main compressor that we took time to "train", I copied it, together with its internal buffer before each measurement.
 
 This works pretty well, and we can now train on the entire corpus, and still do pretty fast beam searches:
 ```
-mport ziplm2
+import ziplm2
 data = open("gatsby").read()
 model = ziplm2.ZipModel().fit(data)
 model.beam_search(100, beam_width=100)  # Output: 'xi drivers in the village never\ntook a fare past the entrance gate without stopping for a minute and'
 ```
 
-The only problem? This text is just a plain copy of a line from somewhere near the penultimum paragraph.
+The only problem? This text is just a plain copy of a line from somewhere near the penultimate paragraph.
 Why do we overfit so hard? To understand that, we need to dive deep into the inner workings of gzip, or lz77 as the internal algorithm is called.
 
 ## The insides of Gzip
@@ -128,8 +128,8 @@ But by the time we are compressing the suffix `ACADABRA` we can use the `A` we h
 
 Once we have converted the text into this tokenized format,  we count the number of each kind of unique token.
 This gives us the probability distribution we use for the Huffman encoding.
-We see this is an extraodinarily simple scheme, where the assumed probability distribution of a token, given the context, $p(x|c)$, is completely independent of the context!
-Of course there is still some dependency on the character level, but only because the tokens themselves refer to the context.
+We see this is an extraordinarily simple scheme, where the assumed probability distribution of a token, given the context, $p(x|c)$, is completely independent of the context!
+Of course, there is still some dependency on the character level, but only because the tokens themselves refer to the context.
 
 Now assume we compute the probability $p(x)$, the length $w_x$ and the entropy $e_x = \log_2(1/p(x))$ for each token.
 How can we write the longest text using the fewest bits?
@@ -139,12 +139,12 @@ So it's just going to repeat some random substring infinitely.
 
 ## Enter Byte embedding
 
-As we have seen, the ZipLM on it's own doesn't work: The probability distribution on character level is discretized so much that we just get random text.
+As we have seen, the ZipLM on it's own doesn't work: The probability distribution on a character level is discretized so much that we just get random text.
 On the other hand, using beam search - which normally is useful for getting better output from bad language models - will just give us a boring repeated piece of text from the training data.
 Does it mean the war is lost, and we must give up and go back to transformers?
 Emphatically no!
 It simply means we need to use an even smarter form of search.
-We need something that still samples from the compressors probability distribution, rather than just maximizing the tokens per bit. But it should work at a larger scale than single characters.
+We need something that still samples from the compressor's probability distribution, rather than just maximizing the tokens per bit. But it should work on a larger scale than single characters.
 One way to do this is to find some useful "vocabulary" of subwords, and simply run the sampling algorithm on this instead of the character level.
 I wrote a simple Byte pair encoding (as is used by GPT and others).
 We can then run sampling at different temperatures and see what happens:
@@ -163,8 +163,8 @@ Temperature: 4, Output: when 't from the standbegan to thought n't answfor the o
 Temperature: 5, Output: ickranning night dn't ly.  "Wolfshiin his into ed and , and I Miss Bakshe was afternoon."  The Gatsby's Miss Bakfrom the turned ," she
 ```
 
-So ok, it's definitely not completely random, like sampling at the character level.
-It still has repetitions at low temps, and gets more rambly at larger temps.
+So okay, it's definitely not completely random, like sampling at the character level.
+It still has repetitions at low temps and gets more rambly at larger temps.
 
 ## Conclusion
 
