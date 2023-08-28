@@ -59,15 +59,15 @@ If we look at the length of `gzip(prompt + ch)` for all characters, `ch`, minus 
 
 Only two different values.
 This explains why there are only two different logprops as well.
-One way to think about this is that each possible token/character, `x`, has an output probability `p(x|c)` given the context, `c`.
-An ideal compressor would use $log_2(1/p(x|c))$ bits to encode character `x`.
+One way to think about this is that each possible token/character, $x$, has an output probability $p(x|c)$ given the context, $c$.
+An ideal compressor would use $\log_2(1/p(x|c))$ bits to encode character $x$.
 However, the `gzip` command, as used in the ZipLM, has to output a number of bytes.
-So the real valued $log2(1/p(x|c))$ gets "rounded" either up or down.
+So the real valued $\log_2(1/p(x|c))$ gets "rounded" either up or down.
 
 Why does Beam search help?
 With Beam search we are basically asking the question: "Given I'm going to write 100 characters, which _complete string_ will have the smallest compression".
 Of course actually answering this question would require a "complete search" rather than a "beam search", but this is the question we are approximating the answer to as we increase the beam width.
-Now we are asking for an approximation to $log2(1/p(x_1x_2x_3|c)) = log2(1/p(x_1|c)) + log2(1/p(x_1x_2|cx_2)) + log2(1/p(x_3|cx_2x_2))$, which is a larger number, and so the "rounding" effects are less pronounced.
+Now we are asking for an approximation to $\log_2(1/p(x_1x_2x_3|c)) = \log_2(1/p(x_1|c)) + \log_2(1/p(x_1x_2|cx_2)) + \log_2(1/p(x_3|cx_2x_2))$, which is a larger number, and so the "rounding" effects are less pronounced.
 
 ## Making it faster by delving into gzip itself
 
